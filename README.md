@@ -5,7 +5,7 @@ A Java build system that requires no external programs-- just Java.
 Inspired by [Zig's build system](https://ziglang.org/learn/build-system/) as well as the project [tsoding/nobuild](https://github.com/tsoding/nobuild), and a strong dislike for Gradle and other Java build systems.
 
 
-It is very incomplete in its current state. Using it is not recommended. I also cannot promise that I will ever finish it because I don't like Java nearly enough to care.
+It is very incomplete in its current state. Using it is not recommended. I also cannot promise that I will ever finish it because I don't like Java very much.
 
 ## Usage
 
