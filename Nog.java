@@ -1,5 +1,6 @@
 package NogBuild;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -8,14 +9,16 @@ import java.util.ArrayList;
 class Cmd {
     public static String runCommand(String[] args) throws IOException {
         Process proc = rt.exec(getFullCommand(args));
-        InputStreamReader reader = new InputStreamReader(proc.getInputStream());
-        char[] buffer = new char[4096];
-        StringBuilder output = new StringBuilder();
-        int n;
-        while ((n = reader.read(buffer)) != -1) {
-            output.append(buffer, 0, n);
+        BufferedReader output = new BufferedReader(new InputStreamReader(proc.getInputStream())); 
+        String line = null, previous = null;
+        StringBuilder sb = new StringBuilder();
+        while ((line = output.readLine()) != null) {
+            if (!line.equals(previous)) {
+                previous = line;
+                sb.append(line).append('\n');
+            }
         }
-        return output.toString();
+        return sb.toString();
     }
 
     public static boolean isWindows() {
@@ -81,11 +84,11 @@ public class Nog {
         ArrayList<String> command = new ArrayList<String>();
         command.add("javac");
         command.add("-d");
-        command.add(cacheDir.getAbsolutePath());
+        command.add(cacheDir.getPath());
 
         for (BuildArtifact unit: units) {
             copyToCache(unit.file);
-            command.add(unit.file.getAbsolutePath());
+            command.add(unit.file.getPath());
         }
 
         System.out.println("+ " + String.join(" ", command));
@@ -94,11 +97,40 @@ public class Nog {
         System.out.print(output);
     }
 
+    public static void bootstrap(String nogFilePath, String buildFilePath, String outputJarName, String entry) throws IOException {
+        File nogFile = new File(nogFilePath);
+        File buildFile = new File(buildFilePath);
+
+        String[] command = new String[] {
+            "javac",
+            nogFile.getPath(),
+            buildFile.getPath(),
+            "-d",
+            projectDir.getPath(),
+        };
+        System.out.println("+ " + String.join(" ", command));
+        String output = Cmd.runCommand(command);
+        System.out.print(output);
+
+        command = new String[] {
+            "jar",
+            "cfe",
+            outputJarName,
+            entry,
+            "-C",
+            projectDir.getPath(),
+            projectDir.getPath()
+        };
+        System.out.println("+ " + String.join(" ", command));
+        output = Cmd.runCommand(command);
+        System.out.print(output);
+    }
+
     public static void runClass(String className) throws IOException {
         String[] command = new String[] {
             "java",
             "-cp",
-            cacheDir.getAbsolutePath(),
+            cacheDir.getPath(),
             packageName + "." + className
         };
         System.out.println("+ " + String.join(" ", command));
@@ -112,6 +144,7 @@ public class Nog {
 
     private static String packageName = "";
 
+    private static File projectDir = new File(".");
     private static File cacheDir = new File("nog-cache");
     private static File outDir = new File("nog-out");
 
@@ -149,8 +182,8 @@ public class Nog {
         if (Cmd.isWindows()) {
             String[] command = new String[] {
                 "xcopy",
-                file.getAbsolutePath(),
-                cacheDir.getAbsolutePath(),
+                file.getPath(),
+                cacheDir.getPath(),
                 "/s",
                 "/y"
             };
@@ -159,8 +192,8 @@ public class Nog {
         } else {
             String[] command = new String[] {
                 "cp",
-                file.getAbsolutePath(),
-                cacheDir.getAbsolutePath()
+                file.getPath(),
+                cacheDir.getPath()
             };
             System.out.println("+ " + String.join(" ", command));
             Cmd.runCommand(command);
@@ -173,7 +206,7 @@ public class Nog {
                 "rmdir",
                 "/s",
                 "/q",
-                cacheDir.getAbsolutePath()
+                cacheDir.getPath()
             };
             System.out.println("+ " + String.join(" ", command));
             Cmd.runCommand(command);
@@ -181,7 +214,7 @@ public class Nog {
             String[] command = new String[] {
                 "rm",
                 "-rf",
-                cacheDir.getAbsolutePath()
+                cacheDir.getPath()
             };
             System.out.println("+ " + String.join(" ", command));
             Cmd.runCommand(command);
