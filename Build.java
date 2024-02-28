@@ -17,7 +17,7 @@ class Build {
         Nog.bootstrap(
             "Nog.java",
             "Build.java",
-            "build.jar",
+            "nog-cache\\Build.jar",
             "NogBuild.Build"
         );
     }

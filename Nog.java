@@ -74,7 +74,6 @@ public class Nog {
      * Compile and package the project
      */
     public static void build() throws IOException {
-
         clearCache();
 
         if (!cacheDir.exists()) {
@@ -101,12 +100,15 @@ public class Nog {
         File nogFile = new File(nogFilePath);
         File buildFile = new File(buildFilePath);
 
+        copyToCache(nogFile);
+        copyToCache(buildFile);
+
         String[] command = new String[] {
             "javac",
             nogFile.getPath(),
             buildFile.getPath(),
             "-d",
-            projectDir.getPath(),
+            cacheDir.getPath(),
         };
         System.out.println("+ " + String.join(" ", command));
         String output = Cmd.runCommand(command);
@@ -118,12 +120,31 @@ public class Nog {
             outputJarName,
             entry,
             "-C",
-            projectDir.getPath(),
-            projectDir.getPath()
+            cacheDir.getPath(),
+            "NogBuild"
         };
         System.out.println("+ " + String.join(" ", command));
         output = Cmd.runCommand(command);
         System.out.print(output);
+
+        if (Cmd.isWindows()) {
+            command = new String[] {
+                "xcopy",
+                new File(outputJarName).getPath(),
+                projectDir.getPath(),
+                "/s",
+                "/y"
+            };
+        } else {
+            command = new String[] {
+                "cp",
+                new File(outputJarName).getPath(),
+                projectDir.getPath()
+            };
+        }
+
+        System.out.println("+ " + String.join(" ", command));
+        Cmd.runCommand(command);
     }
 
     public static void runClass(String className) throws IOException {
