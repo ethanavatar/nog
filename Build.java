@@ -1,24 +1,26 @@
 package NogBuild;
 
+import java.io.File;
+
 class Build {
     public static void main(String[] args) throws Exception {
         Nog.setPackage("Main");
 
-        Nog.addFile("src/Hello.java");
-        Nog.addFile("src/Program.java");
+        Module main = Nog.addModule("Main");
 
-        Nog.build();
+        main.addFile("src\\Hello.java");
+        main.addFile("src\\Program.java");
 
-        if (args.length > 0 && args[0].equals("run")) {
-            Nog.runClass("Program");
-        }
+        main.build();
 
-        System.out.println("Boostraping Nog...");
-        Nog.bootstrap(
-            "Nog.java",
-            "Build.java",
-            "nog-cache\\Build.jar",
-            "NogBuild.Build"
-        );
+        System.out.println("Bootstrapping...");
+        Module build = Nog.addModule("NogBuild");
+
+        build.addFile("Nog.java");
+        build.addFile("Build.java");
+
+        build.build();
+        build.makeJar("Build.jar", "Build");
+        Nog.copyFile(Nog.cachedPath("Build.jar"), Nog.projectDir);
     }
 }

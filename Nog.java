@@ -3,18 +3,131 @@ package NogBuild;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 
-class Cmd {
+class BuildArtifact {
+    public File file;
+    public BuildArtifact(File file) {
+        this.file = file;
+    }
+}
+
+class Module {
+    String name;
+    ArrayList<BuildArtifact> units = new ArrayList<BuildArtifact>();
+    public Module(String name) {
+        this.name = name;
+    }
+
+    public void addFile(String filePath) throws IOException {
+        File file = new File(filePath);
+        Nog.copyFile(filePath, Nog.cacheDir);
+        addArtifact(filePath);
+    }
+
+    public void addArtifact(String filePath) {
+        File file = new File(filePath);
+        BuildArtifact artifact = new BuildArtifact(file);
+        units.add(artifact);
+    }
+
+    public void build() throws IOException {
+        ArrayList<String> command = new ArrayList<String>();
+        command.add("javac");
+        command.add("-d");
+        command.add(Nog.cacheDir);
+
+        for (BuildArtifact unit : units) {
+            command.add(unit.file.getPath());
+        }
+
+        Nog.runCommand(command.toArray(new String[0]));
+    }
+
+    public void makeJar(String jarName, String entry) throws IOException {
+        String[] command = new String[] {
+            "jar", "cvfe", Nog.cacheDir + File.separator + jarName,
+            name + "." + entry,
+            "-C", Nog.cacheDir, name
+        };
+
+        Nog.runCommand(command);
+    }
+
+    public void run(String className) throws IOException {
+        Nog.runCommand(new String[] {
+            "java",
+            "-cp", Nog.cacheDir,
+            name + "." + className
+        });
+    }
+}
+
+public class Nog {
+
+    public static void buildAll() throws IOException {
+        File cache = new File(cacheDir);
+        if (!cache.exists()) cache.mkdir();
+
+        ArrayList<String> command = new ArrayList<String>();
+        command.add("javac");
+        command.add("-d");
+        command.add(cacheDir);
+
+        for (Module module : modules) {
+            module.build();
+        }
+
+        runCommand(command.toArray(new String[0]));
+    }
+
+    public static void setPackage(String name) {
+        packageName = name;
+    }
+
+    public static Module addModule(String name) {
+        Module module = new Module(name);
+        modules.add(module);
+        return module;
+    }
+
+    public static String cachedPath(String path) {
+        return cacheDir + File.separator + path;
+    }
+
+    public static void copyFile(String source, String destination) throws IOException {
+        String[] command = isWindows()
+            ? new String[] { "xcopy.exe", source, destination, "/y" }
+            : new String[] { "cp", source, destination };
+        runCommand(command);
+    }
+
     public static boolean isWindows() {
         return System.getProperty("os.name")
             .toLowerCase()
             .startsWith("windows");
     }
 
-    private static void runCommand(String[] args) throws Exception {
-        System.out.println("+ " + String.join(" ", args));
+    private static String packageName = "";
+
+    public static String projectDir = new File(".").getPath();
+    public static String cacheDir = new File("nog-cache").getPath();
+    public static String outDir = new File("nog-out").getPath();
+
+    private static ArrayList<Module> modules =
+        new ArrayList<Module>(); 
+
+    private static String ANSI_RESET = "\u001B[0m";
+    private static String ANSI_GREEN = "\u001B[32m";
+    private static String ANSI_GRAY = "\u001B[37m";
+    private static String ANSI_RED = "\u001B[31m";
+
+    private static Runtime runtime = Runtime.getRuntime();
+
+    public static void runCommand(String[] args) throws IOException {
+        System.out.println(ANSI_GREEN + "+ " + String.join(" ", args) + ANSI_RESET);
 
         String[] prefix = isWindows()
             ? new String[] {"cmd.exe", "/c"}
@@ -25,209 +138,40 @@ class Cmd {
         System.arraycopy(args, 0, command, prefix.length, args.length);
 
         Process process = runtime.exec(command);
-        int exitCode = process.waitFor();
-
-        if (exitCode != 0) {
-            throw new RuntimeException("Process exited with " + exitCode);
+        int exitCode = 0;
+        try {
+            exitCode = process.waitFor();
+        } catch (InterruptedException e) {
+            System.out.println("Process interrupted");
         }
 
-        try (BufferedReader stdout = new BufferedReader(
-            new InputStreamReader(process.getInputStream())
+        if (exitCode == 0) {
+            String stdout = getOutput(process.getInputStream());
+            if (stdout.length() > 0) {
+                System.out.print(ANSI_GRAY);
+                System.out.print(stdout);
+                System.out.print(ANSI_RESET);
+            }
+        } else {
+            String stderr = getOutput(process.getErrorStream());
+            if (stderr.length() > 0) {
+                System.err.print(ANSI_RED);
+                System.err.print(stderr);
+                System.err.print(ANSI_RESET);
+            }
+        }
+    }
+
+    private static String getOutput(InputStream stream) throws IOException {
+        StringBuilder output = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(
+            new InputStreamReader(stream)
         )) {
-            System.out.print(readOutput(process, stdout));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append("\n");
+            }
         }
-
-        try (BufferedReader stderr = new BufferedReader(
-            new InputStreamReader(process.getErrorStream())
-        )) {
-            System.err.print(readOutput(process, stderr));
-        }
-    }
-
-
-    private static Runtime rt = Runtime.getRuntime();
-
-    private static String[] getSystemPrefix() {
-        if (isWindows()) {
-            return new String[] {"cmd", "/c"};
-        } else {
-            return new String[] {"/bin/sh", "-c"};
-        }
-    }
-}
-
-class BuildArtifact {
-    public File file;
-    boolean compileOnly;
-    public BuildArtifact(File file, boolean compileOnly) {
-        this.file = file;
-        this.compileOnly = compileOnly;
-    }
-}
-
-public class Nog {
-    /**
-     * Add a file to be compiled and packaged in the final build
-     */
-    public static void addFile(String filePath) {
-        addArtifact(filePath, false);
-    }
-
-    /**
-     * Add a file as a dependency but do not include it in the final build
-     */
-    public static void compileOnly(String filePath) {
-        addArtifact(filePath, true);
-    }
-
-    /**
-     * Compile and package the project
-     */
-    public static void build() throws IOException {
-        clearCache();
-
-        if (!cacheDir.exists()) {
-            cacheDir.mkdir();
-        }
-
-        ArrayList<String> command = new ArrayList<String>();
-        command.add("javac");
-        command.add("-d");
-        command.add(cacheDir.getPath());
-
-        for (BuildArtifact unit: units) {
-            copyToCache(unit.file);
-            command.add(unit.file.getPath());
-        }
-
-        Cmd.runCommand(command.toArray(new String[0]));
-    }
-
-    public static void bootstrap(String nogFilePath, String buildFilePath, String outputJarName, String entry) throws IOException {
-        File nogFile = new File(nogFilePath);
-        File buildFile = new File(buildFilePath);
-
-        copyToCache(nogFile);
-        copyToCache(buildFile);
-
-        Cmd.runCommand(new String[] {
-            "javac",
-            nogFile.getPath(),
-            buildFile.getPath(),
-            "-d",
-            cacheDir.getPath(),
-        });
-
-        Cmd.runCommand(new String[] {
-            "jar",
-            "cfe",
-            outputJarName,
-            entry,
-            "-C",
-            cacheDir.getPath(),
-            "NogBuild"
-        });
-
-        if (Cmd.isWindows()) {
-            command = new String[] {
-                "xcopy",
-                new File(outputJarName).getPath(),
-                projectDir.getPath(),
-                "/s",
-                "/y"
-            };
-        } else {
-            command = new String[] {
-                "cp",
-                new File(outputJarName).getPath(),
-                projectDir.getPath()
-            };
-        }
-
-        Cmd.runCommand(command);
-    }
-
-    public static void runClass(String className) throws IOException {
-        Cmd.runCommand(new String[] {
-            "java",
-            "-cp",
-            cacheDir.getPath(),
-            packageName + "." + className
-        });
-    }
-
-    public static void setPackage(String name) {
-        packageName = name;
-    }
-
-    private static String packageName = "";
-
-    private static File projectDir = new File(".");
-    private static File cacheDir = new File("nog-cache");
-    private static File outDir = new File("nog-out");
-
-    private static ArrayList<BuildArtifact> units =
-        new ArrayList<BuildArtifact>(); 
-
-
-    private static void addArtifact(String filePath, boolean compileOnly) throws IllegalArgumentException {
-        File file = new File(filePath);
-        if (!file.exists()) {
-            throw new IllegalArgumentException(
-                "File does not exist: " + filePath);
-        }
-
-        if (!file.isFile()) {
-            throw new IllegalArgumentException(
-                "Not a file: " + filePath);
-        }
-
-        if (!file.canRead()) {
-            throw new IllegalArgumentException(
-                "Cannot read file: " + filePath);
-        }
-
-        if (!file.getName().endsWith(".java")) {
-            throw new IllegalArgumentException(
-                "Not a Java file: " + filePath);
-        }
-
-        BuildArtifact artifact = new BuildArtifact(file, compileOnly);
-        units.add(artifact);
-    }
-
-    private static void copyToCache(File file) throws IOException {
-        if (Cmd.isWindows()) {
-            Cmd.runCommand(new String[] {
-                "xcopy",
-                file.getPath(),
-                cacheDir.getPath(),
-                "/s",
-                "/y"
-            });
-        } else {
-            Cmd.runCommand(new String[] {
-                "cp",
-                file.getPath(),
-                cacheDir.getPath()
-            });
-        }
-    }
-
-    private static void clearCache() throws IOException {
-        if (Cmd.isWindows()) {
-            Cmd.runCommand(new String[] {
-                "rmdir",
-                "/s",
-                "/q",
-                cacheDir.getPath()
-            });
-        } else {
-            Cmd.runCommand(new String[] {
-                "rm",
-                "-rf",
-                cacheDir.getPath()
-            });
-        }
+        return output.toString();
     }
 }
