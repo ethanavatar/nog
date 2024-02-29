@@ -7,25 +7,43 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 
 class Cmd {
-    public static String runCommand(String[] args) throws IOException {
-        Process proc = rt.exec(getFullCommand(args));
-        BufferedReader output = new BufferedReader(new InputStreamReader(proc.getInputStream())); 
-        String line = null, previous = null;
-        StringBuilder sb = new StringBuilder();
-        while ((line = output.readLine()) != null) {
-            if (!line.equals(previous)) {
-                previous = line;
-                sb.append(line).append('\n');
-            }
-        }
-        return sb.toString();
-    }
-
     public static boolean isWindows() {
         return System.getProperty("os.name")
             .toLowerCase()
             .startsWith("windows");
     }
+
+    private static void runCommand(String[] args) throws Exception {
+        System.out.println("+ " + String.join(" ", args));
+
+        String[] prefix = isWindows()
+            ? new String[] {"cmd.exe", "/c"}
+            : new String[] {"/bin/sh", "-c"};
+
+        String[] command = new String[prefix.length + args.length];
+        System.arraycopy(prefix, 0, command, 0, prefix.length);
+        System.arraycopy(args, 0, command, prefix.length, args.length);
+
+        Process process = runtime.exec(command);
+        int exitCode = process.waitFor();
+
+        if (exitCode != 0) {
+            throw new RuntimeException("Process exited with " + exitCode);
+        }
+
+        try (BufferedReader stdout = new BufferedReader(
+            new InputStreamReader(process.getInputStream())
+        )) {
+            System.out.print(readOutput(process, stdout));
+        }
+
+        try (BufferedReader stderr = new BufferedReader(
+            new InputStreamReader(process.getErrorStream())
+        )) {
+            System.err.print(readOutput(process, stderr));
+        }
+    }
+
 
     private static Runtime rt = Runtime.getRuntime();
 
@@ -35,14 +53,6 @@ class Cmd {
         } else {
             return new String[] {"/bin/sh", "-c"};
         }
-    }
-
-    private static String[] getFullCommand(String[] args) {
-        String[] cmd = getSystemPrefix();
-        String[] command = new String[cmd.length + args.length];
-        System.arraycopy(cmd, 0, command, 0, cmd.length);
-        System.arraycopy(args, 0, command, cmd.length, args.length);
-        return command;
     }
 }
 
@@ -90,10 +100,7 @@ public class Nog {
             command.add(unit.file.getPath());
         }
 
-        System.out.println("+ " + String.join(" ", command));
-
-        String output = Cmd.runCommand(command.toArray(new String[0]));
-        System.out.print(output);
+        Cmd.runCommand(command.toArray(new String[0]));
     }
 
     public static void bootstrap(String nogFilePath, String buildFilePath, String outputJarName, String entry) throws IOException {
@@ -103,18 +110,15 @@ public class Nog {
         copyToCache(nogFile);
         copyToCache(buildFile);
 
-        String[] command = new String[] {
+        Cmd.runCommand(new String[] {
             "javac",
             nogFile.getPath(),
             buildFile.getPath(),
             "-d",
             cacheDir.getPath(),
-        };
-        System.out.println("+ " + String.join(" ", command));
-        String output = Cmd.runCommand(command);
-        System.out.print(output);
+        });
 
-        command = new String[] {
+        Cmd.runCommand(new String[] {
             "jar",
             "cfe",
             outputJarName,
@@ -122,10 +126,7 @@ public class Nog {
             "-C",
             cacheDir.getPath(),
             "NogBuild"
-        };
-        System.out.println("+ " + String.join(" ", command));
-        output = Cmd.runCommand(command);
-        System.out.print(output);
+        });
 
         if (Cmd.isWindows()) {
             command = new String[] {
@@ -143,20 +144,16 @@ public class Nog {
             };
         }
 
-        System.out.println("+ " + String.join(" ", command));
         Cmd.runCommand(command);
     }
 
     public static void runClass(String className) throws IOException {
-        String[] command = new String[] {
+        Cmd.runCommand(new String[] {
             "java",
             "-cp",
             cacheDir.getPath(),
             packageName + "." + className
-        };
-        System.out.println("+ " + String.join(" ", command));
-        String output = Cmd.runCommand(command);
-        System.out.print(output);
+        });
     }
 
     public static void setPackage(String name) {
@@ -201,44 +198,36 @@ public class Nog {
 
     private static void copyToCache(File file) throws IOException {
         if (Cmd.isWindows()) {
-            String[] command = new String[] {
+            Cmd.runCommand(new String[] {
                 "xcopy",
                 file.getPath(),
                 cacheDir.getPath(),
                 "/s",
                 "/y"
-            };
-            System.out.println("+ " + String.join(" ", command));
-            Cmd.runCommand(command);
+            });
         } else {
-            String[] command = new String[] {
+            Cmd.runCommand(new String[] {
                 "cp",
                 file.getPath(),
                 cacheDir.getPath()
-            };
-            System.out.println("+ " + String.join(" ", command));
-            Cmd.runCommand(command);
+            });
         }
     }
 
     private static void clearCache() throws IOException {
         if (Cmd.isWindows()) {
-            String[] command = new String[] {
+            Cmd.runCommand(new String[] {
                 "rmdir",
                 "/s",
                 "/q",
                 cacheDir.getPath()
-            };
-            System.out.println("+ " + String.join(" ", command));
-            Cmd.runCommand(command);
+            });
         } else {
-            String[] command = new String[] {
+            Cmd.runCommand(new String[] {
                 "rm",
                 "-rf",
                 cacheDir.getPath()
-            };
-            System.out.println("+ " + String.join(" ", command));
-            Cmd.runCommand(command);
+            });
         }
     }
 }
