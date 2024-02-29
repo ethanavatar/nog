@@ -1,7 +1,5 @@
 package NogBuild;
 
-import java.io.File;
-
 class Build {
     public static void main(String[] args) throws Exception {
         Nog.setPackage("Main");
@@ -13,7 +11,11 @@ class Build {
 
         main.build();
 
-        System.out.println("Bootstrapping...");
+        if (args.length > 0 && args[0].equals("run")) {
+            main.run("Program");
+        }
+
+        // --- Bootstrap ---
         Module build = Nog.addModule("NogBuild");
 
         build.addFile("Nog.java");
@@ -21,6 +23,6 @@ class Build {
 
         build.build();
         build.makeJar("Build.jar", "Build");
-        Nog.copyFile(Nog.cachedPath("Build.jar"), Nog.projectDir);
+        Nog.copyFile(Nog.cachedPath("Build.jar"), Nog.projectPath("Build.jar"));
     }
 }

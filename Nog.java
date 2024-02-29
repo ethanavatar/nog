@@ -12,10 +12,14 @@ class BuildArtifact {
     public BuildArtifact(File file) {
         this.file = file;
     }
+    long lastModified() {
+        return file.lastModified();
+    }
 }
 
 class Module {
     String name;
+    private int artifactsBuilt = 0;
     ArrayList<BuildArtifact> units = new ArrayList<BuildArtifact>();
     public Module(String name) {
         this.name = name;
@@ -23,7 +27,6 @@ class Module {
 
     public void addFile(String filePath) throws IOException {
         File file = new File(filePath);
-        Nog.copyFile(filePath, Nog.cacheDir);
         addArtifact(filePath);
     }
 
@@ -40,15 +43,41 @@ class Module {
         command.add(Nog.cacheDir);
 
         for (BuildArtifact unit : units) {
+            long lastModified = unit.file.lastModified();
+
+            long cacheLastModified = 0;
+            File cacheFile = new File(Nog.cachedPath(unit.file.getName()));
+            if (cacheFile.exists()) {
+                cacheLastModified = new File(
+                    Nog.cachedPath(unit.file.getName())
+                ).lastModified();
+            }
+
+            if (lastModified <= cacheLastModified) {
+                continue;
+            }
+
+            Nog.copyFileUnchecked(unit.file.getPath(), Nog.cacheDir);
             command.add(unit.file.getPath());
+            artifactsBuilt++;
+        }
+
+        if (artifactsBuilt == 0) {
+            return;
         }
 
         Nog.runCommand(command.toArray(new String[0]));
     }
 
     public void makeJar(String jarName, String entry) throws IOException {
+        if (artifactsBuilt == 0) {
+            return;
+        }
+
+        String out = Nog.cacheDir + File.separator + jarName;
+
         String[] command = new String[] {
-            "jar", "cvfe", Nog.cacheDir + File.separator + jarName,
+            "jar", "cvfe", out,
             name + "." + entry,
             "-C", Nog.cacheDir, name
         };
@@ -93,11 +122,29 @@ public class Nog {
         return module;
     }
 
-    public static String cachedPath(String path) {
-        return cacheDir + File.separator + path;
+    public static String cachedPath(String... path) {
+        return cacheDir + File.separator + String.join(File.separator, path);
+    }
+
+    public static String projectPath(String... path) {
+        return projectDir + File.separator + String.join(File.separator, path);
     }
 
     public static void copyFile(String source, String destination) throws IOException {
+        File sourceFile = new File(source);
+        File destinationFile = new File(destination);
+
+        boolean bothExist = sourceFile.exists() && destinationFile.exists();
+        boolean destIsNewer = sourceFile.lastModified() <= destinationFile.lastModified();
+
+        if (bothExist && destIsNewer) {
+            return;
+        }
+
+        copyFileUnchecked(source, destination);
+    }
+
+    public static void copyFileUnchecked(String source, String destination) throws IOException {
         String[] command = isWindows()
             ? new String[] { "xcopy.exe", source, destination, "/y" }
             : new String[] { "cp", source, destination };
