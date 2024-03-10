@@ -6,14 +6,32 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 class BuildArtifact {
     public File file;
+    public File cachedFile;
+
     public BuildArtifact(File file) {
         this.file = file;
+        this.cachedFile = new File(Nog.cachedPath(file.getName()));
     }
-    long lastModified() {
+
+    public long lastModified() {
         return file.lastModified();
+    }
+
+    public boolean newerThanCached() {
+        if (cachedFile.exists()) {
+            return file.lastModified() > cachedFile.lastModified();
+        }
+        return true;
+    }
+
+    public void copyToCache() throws IOException {
+        File cache = new File(Nog.cacheDir);
+        if (!cache.exists()) cache.mkdir();
+        Nog.copyFile(file.getPath(), cachedFile.getPath());
     }
 }
 
@@ -25,15 +43,23 @@ class Module {
         this.name = name;
     }
 
-    public void addFile(String filePath) throws IOException {
-        File file = new File(filePath);
-        addArtifact(filePath);
+    public ArrayList<String> getModifiedUnits() {
+        ArrayList<String> modified = new ArrayList<String>();
+        for (BuildArtifact unit: units) {
+            if (unit.newerThanCached()) modified.add(unit.file.getPath());
+        }
+        return modified;
     }
 
-    public void addArtifact(String filePath) {
+    public BuildArtifact addFile(String filePath) throws IOException {
         File file = new File(filePath);
+        if (!file.exists()) {
+            throw new IOException("File not found: " + filePath);
+        }
+
         BuildArtifact artifact = new BuildArtifact(file);
         units.add(artifact);
+        return artifact;
     }
 
     public void build() throws IOException {
@@ -41,23 +67,14 @@ class Module {
         command.add("javac");
         command.add("-d");
         command.add(Nog.cacheDir);
+        command.add("-cp");
+        command.add(Nog.cacheDir);
 
-        for (BuildArtifact unit : units) {
-            long lastModified = unit.file.lastModified();
-
-            long cacheLastModified = 0;
-            File cacheFile = new File(Nog.cachedPath(unit.file.getName()));
-            if (cacheFile.exists()) {
-                cacheLastModified = new File(
-                    Nog.cachedPath(unit.file.getName())
-                ).lastModified();
-            }
-
-            if (lastModified <= cacheLastModified) {
+        for (BuildArtifact unit: units) {
+            if (!unit.newerThanCached()) {
                 continue;
             }
-
-            Nog.copyFileUnchecked(unit.file.getPath(), Nog.cacheDir);
+            unit.copyToCache();
             command.add(unit.file.getPath());
             artifactsBuilt++;
         }
@@ -95,6 +112,14 @@ class Module {
 }
 
 public class Nog {
+
+    public static void runJar(String jarName, String[] args) throws IOException {
+        Nog.runCommand(new String[] {
+            "java",
+            "-jar", jarName,
+            String.join(" ", args)
+        });
+    }
 
     public static void buildAll() throws IOException {
         File cache = new File(cacheDir);
@@ -137,14 +162,19 @@ public class Nog {
         boolean bothExist = sourceFile.exists() && destinationFile.exists();
         boolean destIsNewer = sourceFile.lastModified() <= destinationFile.lastModified();
 
+        String destinationDir = destination;
+        if (!destinationFile.isDirectory()) {
+            destinationDir = destinationFile.getParent();
+        }
+
         if (bothExist && destIsNewer) {
             return;
         }
 
-        copyFileUnchecked(source, destination);
+        copyFileUnchecked(source, destinationDir);
     }
 
-    public static void copyFileUnchecked(String source, String destination) throws IOException {
+    private static void copyFileUnchecked(String source, String destination) throws IOException {
         String[] command = isWindows()
             ? new String[] { "xcopy.exe", source, destination, "/y" }
             : new String[] { "cp", source, destination };
@@ -166,10 +196,10 @@ public class Nog {
     private static ArrayList<Module> modules =
         new ArrayList<Module>(); 
 
-    private static String ANSI_RESET = "\u001B[0m";
-    private static String ANSI_GREEN = "\u001B[32m";
-    private static String ANSI_GRAY = "\u001B[37m";
-    private static String ANSI_RED = "\u001B[31m";
+    public static String ANSI_RESET = "\u001B[0m";
+    public static String ANSI_GREEN = "\u001B[32m";
+    public static String ANSI_GRAY = "\u001B[37m";
+    public static String ANSI_RED = "\u001B[31m";
 
     private static Runtime runtime = Runtime.getRuntime();
 
