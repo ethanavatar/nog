@@ -8,11 +8,10 @@ class Build {
         bootstrapBuild(args);
 
         Nog.setPackage("Main");
-
         Module main = Nog.addModule("Main");
 
-        main.addFile("src\\Hello.java");
-        main.addFile("src\\Program.java");
+        main.addFile("src", "Hello.java");
+        main.addFile("src", "Program.java");
 
         main.build();
 
@@ -28,10 +27,7 @@ class Build {
         build.addFile("Build.java");
 
         ArrayList<String> modifiedFiles = build.getModifiedUnits();
-        if (modifiedFiles.size() == 0) {
-            System.out.println("No build files changed.");
-            return; 
-        }
+        if (modifiedFiles.size() == 0) return;
 
         System.out.println("Build files changed:");
         for (String f: modifiedFiles) {
@@ -40,13 +36,13 @@ class Build {
 
         // This is a failsafe to prevent the build system from becoming
         // a fork bomb when modified files arent detected properly
-        if (args.length > 0 && Arrays.asList(args).contains("bootstrapped")) {
+        if (args.length > 0 && args[0].equals("bootstrapped")) {
             System.out.println(
                 Nog.ANSI_RED
                 + "Recursion limit reached. Aborting bootstrap..."
                 + Nog.ANSI_RESET);
 
-            return;
+            System.exit(1);
         }
 
 

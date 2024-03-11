@@ -51,10 +51,10 @@ class Module {
         return modified;
     }
 
-    public BuildArtifact addFile(String filePath) throws IOException {
-        File file = new File(filePath);
+    public BuildArtifact addFile(String... pathSegments) throws IOException {
+        File file = new File(String.join(File.separator, pathSegments));
         if (!file.exists()) {
-            throw new IOException("File not found: " + filePath);
+            throw new IOException("File not found: " + file.getPath());
         }
 
         BuildArtifact artifact = new BuildArtifact(file);
@@ -112,6 +112,10 @@ class Module {
 }
 
 public class Nog {
+
+    public static String joinPath(String... parts) {
+        return String.join(File.separator, parts);
+    }
 
     public static void runJar(String jarName, String[] args) throws IOException {
         Nog.runCommand(new String[] {
